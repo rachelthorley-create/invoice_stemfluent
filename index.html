@@ -4,7 +4,9 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>STEMfluent — Invoice Generator</title>
+
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+
 <style>
 :root{--pageW:794px;--pageH:1123px}
 html,body{margin:0;font-family:Montserrat,Arial;background:#f3f3f5}
@@ -15,69 +17,108 @@ input,select,textarea{width:100%;padding:8px;border:1px solid #ddd;border-radius
 textarea{min-height:80px}
 button{margin-top:8px;padding:8px 10px;border-radius:6px;border:0;background:#111;color:#fff;cursor:pointer}
 .btn-ghost{background:#fff;border:1px solid #ccc;color:#111}
+
 .canvas-wrap{flex:1;display:flex;justify-content:center}
 .page{width:794px;height:1123px;background:#fff;position:relative;box-shadow:0 10px 30px rgba(0,0,0,0.1);overflow:hidden}
 .bgsvg{position:absolute;inset:0}
 .content{position:relative;padding:80px}
+
 .logo{position:absolute;right:80px;top:60px;text-align:right}
 .logo h1{margin:0;font-size:30px}
 .company-meta{font-size:12px;color:#666;margin-top:6px}
+
 .big-title{font-size:100px;letter-spacing:8px;margin:120px 0 60px}
-.meta{display:flex;justify-content:space-between;margin-bottom:30px}
+
+.meta{display:flex;justify-content:space-between;margin-bottom:30px;gap:40px}
+.meta > div{width:50%}
+#lblBill{display:block;word-break:break-word}
+
 table{width:100%;border-collapse:collapse;margin-top:20px}
 thead td{font-weight:700;border-bottom:2px dotted #ccc;padding:10px 6px}
 tbody td{border-bottom:1px dotted #e5e5e5;padding:12px 6px}
 td.amount{text-align:right}
+
 .remove-btn{background:#fff;border:1px solid #ccc;padding:2px 6px;border-radius:4px;cursor:pointer}
+
 .total-row{display:flex;justify-content:flex-end;margin-top:30px;font-size:22px;font-weight:700}
 .discount-row{display:flex;justify-content:flex-end;margin-top:8px;font-size:16px;color:#666}
+
 .notes-section{margin-top:40px;white-space:pre-wrap}
+
 .bank{margin-top:40px;border-top:1px dotted #ccc;padding-top:20px}
 .bank b{display:inline-block;width:130px}
+
 .footer{position:absolute;bottom:20px;left:0;right:0;text-align:center;font-size:12px;color:#777}
+
+/* export mode */
+.export-mode .remove-btn{display:none !important}
+.export-mode input{
+  border:none !important;
+  background:transparent !important;
+  pointer-events:none !important;
+}
+.export-mode input[type='number']{
+  appearance:textfield;
+  width:auto;
+}
 </style>
 </head>
+
 <body>
 <div class="app">
+
 <div class="panel">
 <h3>Controls</h3>
+
 <label>Currency</label>
 <select id="currencySelect">
 <option value="GBP">GBP (£)</option>
 <option value="USD">USD ($)</option>
 <option value="EUR">EUR (€)</option>
 </select>
+
+<label>Exchange Rate (per 1 GBP)</label>
+<input id="rateUSD" type="number" step="0.01" value="1.35">
+<input id="rateEUR" type="number" step="0.01" value="1.15">
+
 <label>Invoice number</label>
-<input id="invoiceNumber" type="number" value="30" />
+<input id="invoiceNumber" type="number" value="53" />
+
 <label>Date</label>
-<input id="invoiceDate" type="text" value="1/11/2025" />
+<input id="invoiceDate" type="text" />
+
 <label>Bill to</label>
-<input id="billTo" type="text" value="FAO phoenixwindsori" />
+<input id="billTo" type="text" value="FAO " />
+
 <label>Discount %</label>
 <input id="discount" type="number" value="0" min="0" max="100" />
-<label>Add Pre-Populated Item</label>
+
+<label>Add Item</label>
 <select id="itemSelect"></select>
 <button id="addSelected" class="btn-ghost">Add Selected Item</button>
 <button id="addItem" class="btn-ghost">Add Blank Item</button>
-<label>Free Text (appears above payment details)</label>
+
+<label>Free Text</label>
 <textarea id="freeText"></textarea>
+
 <button id="exportPng">Download PNG</button>
 <button id="exportPdf">Download PDF</button>
+
 </div>
 
 <div class="canvas-wrap">
 <div id="invoicePage" class="page">
 
-<!-- Background Graphics -->
-<svg class="bgsvg" viewBox="0 0 794 1123" preserveAspectRatio="none">
-<polygon points="0,0 250,0 0,350" fill="#616161"/>
-<polygon points="0,250 400,0 0,600" fill="#7a7a7a" opacity="0.5"/>
+<svg class="bgsvg" viewBox="0 0 794 1123">
+<polygon points="0,0 250,0 0,350" fill="#777"/>
+<polygon points="0,250 400,0 0,600" fill="#bbb" opacity="0.6"/>
 </svg>
 
 <div class="content">
+
 <div class="logo">
 <h1>STEMfluent.</h1>
-<div class="company-meta">Registered company: 14959530<br>Churchill College, Cambridge, CB3 0DS</div>
+<div class="company-meta">Registered company: 14959530<br>Churchill College, Cambridge</div>
 </div>
 
 <div class="big-title">INVOICE</div>
@@ -98,25 +139,26 @@ td.amount{text-align:right}
 <td>Item</td>
 <td>Description</td>
 <td>Qty</td>
-<td class="amount" id="amountHeader">Amount / £</td>
+<td class="amount" id="amountHeader"></td>
 <td></td>
 </tr>
 </thead>
 <tbody id="itemsBody"></tbody>
 </table>
 
-<div class="discount-row" id="discountRow" style="display:none"></div>
+<div id="discountRow" class="discount-row" style="display:none"></div>
 <div class="total-row">Total: <span id="totalValue"></span></div>
 
-<div class="notes-section" id="notesSection"></div>
+<div id="notesSection" class="notes-section"></div>
 
 <div class="bank">
-<div><b>Bank Name:</b> Rachel Thorley, stemfluent limited</div>
-<div><b>Bank Account:</b> 04-00-03 32508524</div>
-<div><b>Bank:</b> Monzo bank</div>
+<div><b>Bank Name:</b> Rachel Thorley</div>
+<div><b>Account:</b> 04-00-03 32508524</div>
+<div><b>Bank:</b> Monzo</div>
 </div>
 
 <div class="footer">Email: rachelthorley@gmail.com</div>
+
 </div>
 </div>
 </div>
@@ -124,21 +166,51 @@ td.amount{text-align:right}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
 <script>
 const currencySymbols={GBP:"£",USD:"$",EUR:"€"};
+
 const catalog=[
 {name:"Pottery Workshop",price:250},
-{name:"Plant label - small (50×37mm)",price:5.99},
-{name:"Plant label - medium (75×56mm)",price:6.99},
-{name:"Plant label - large (100×75mm)",price:7.99},
+{name:"Plant label - small",price:5.99},
+{name:"Plant label - medium",price:6.99},
+{name:"Plant label - large",price:7.99},
 {name:"Postage",price:0},
 {name:"Educational Workshop",price:500}
 ];
 
-const state={currency:"GBP",invoiceNumber:30,date:"1/11/2025",billTo:"FAO phoenixwindsori",items:[],discount:0,notes:""};
+function getTodayDate(){
+const d=new Date();
+return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+}
+
+const state={
+currency:"GBP",
+invoiceNumber:53,
+date:getTodayDate(),
+billTo:"FAO ",
+items:[],
+discount:0,
+notes:""
+};
 
 const sel=document.getElementById("itemSelect");
-catalog.forEach((it,i)=>{const o=document.createElement("option");o.value=i;o.textContent=`${it.name} (£${it.price})`;sel.appendChild(o)});
+catalog.forEach((it,i)=>{
+const o=document.createElement("option");
+o.value=i;
+o.textContent=`${it.name} (£${it.price})`;
+sel.appendChild(o);
+});
+
+function getRate(){
+if(state.currency==="USD") return parseFloat(document.getElementById("rateUSD").value);
+if(state.currency==="EUR") return parseFloat(document.getElementById("rateEUR").value);
+return 1;
+}
+
+function convert(price){
+return price * getRate();
+}
 
 function symbol(){return currencySymbols[state.currency]}
 function fmt(n){return symbol()+Number(n).toFixed(2)}
@@ -152,25 +224,39 @@ document.getElementById("notesSection").textContent=state.notes;
 
 const body=document.getElementById("itemsBody");
 body.innerHTML="";
+
 state.items.forEach((it,i)=>{
+const converted=convert(it.unit);
 const tr=document.createElement("tr");
+
 tr.innerHTML=`
 <td>${i+1}</td>
 <td contenteditable oninput="state.items[${i}].desc=this.textContent">${it.desc}</td>
 <td><input type='number' value='${it.qty}' onchange='state.items[${i}].qty=this.value;recalc()'></td>
-<td class='amount'><input type='number' step='0.01' value='${it.unit}' onchange='state.items[${i}].unit=this.value;recalc()'></td>
+<td class='amount'><input type='number' value='${converted.toFixed(2)}' onchange='state.items[${i}].unit=this.value/getRate();recalc()'></td>
 <td><button class='remove-btn' onclick='state.items.splice(${i},1);render()'>✕</button></td>`;
+
 body.appendChild(tr);
 });
+
 recalc();
 }
 
 function recalc(){
-let total=0;state.items.forEach(it=>total+=it.qty*it.unit);
+let total=0;
+state.items.forEach(it=>total+=it.qty*convert(it.unit));
+
 let disc=state.discount?total*(state.discount/100):0;
+
 const dRow=document.getElementById("discountRow");
-if(state.discount>0){dRow.style.display="flex";dRow.textContent=`Discount ${state.discount}% applied: -${fmt(disc)}`}
-else dRow.style.display="none";
+
+if(state.discount>0){
+dRow.style.display="flex";
+dRow.textContent=`Discount ${state.discount}% applied: -${fmt(disc)}`;
+}else{
+dRow.style.display="none";
+}
+
 document.getElementById("totalValue").textContent=fmt(total-disc);
 }
 
@@ -180,6 +266,8 @@ document.getElementById("invoiceDate").oninput=e=>{state.date=e.target.value;ren
 document.getElementById("billTo").oninput=e=>{state.billTo=e.target.value;render()};
 document.getElementById("discount").oninput=e=>{state.discount=e.target.value;recalc()};
 document.getElementById("freeText").oninput=e=>{state.notes=e.target.value;render()};
+document.getElementById("rateUSD").oninput=render;
+document.getElementById("rateEUR").oninput=render;
 
 document.getElementById("addSelected").onclick=()=>{
 const c=catalog[sel.value];
@@ -187,26 +275,42 @@ state.items.push({desc:c.name,qty:1,unit:c.price});
 render();
 };
 
-document.getElementById("addItem").onclick=()=>{state.items.push({desc:"New item",qty:1,unit:0});render()};
+document.getElementById("addItem").onclick=()=>{
+state.items.push({desc:"New item",qty:1,unit:0});
+render();
+};
 
-async function downloadPng(){
-const canvas=await html2canvas(document.getElementById("invoicePage"),{scale:2});
-canvas.toBlob(b=>{const a=document.createElement("a");a.download=`invoice-${state.invoiceNumber}.png`;a.href=URL.createObjectURL(b);a.click()});
-}
+async function exportCanvas(type){
+const page=document.getElementById("invoicePage");
+page.classList.add("export-mode");
 
-async function downloadPdf(){
-const canvas=await html2canvas(document.getElementById("invoicePage"),{scale:2});
+const canvas=await html2canvas(page,{scale:2});
+
+page.classList.remove("export-mode");
+
+if(type==='png'){
+canvas.toBlob(b=>{
+const a=document.createElement("a");
+a.download=`invoice-${state.invoiceNumber}.png`;
+a.href=URL.createObjectURL(b);
+a.click();
+});
+}else{
 const img=canvas.toDataURL("image/png");
 const {jsPDF}=window.jspdf;
 const pdf=new jsPDF({unit:"pt",format:[canvas.width,canvas.height]});
 pdf.addImage(img,"PNG",0,0,canvas.width,canvas.height);
 pdf.save(`invoice-${state.invoiceNumber}.pdf`);
 }
+}
 
-document.getElementById("exportPng").onclick=downloadPng;
-document.getElementById("exportPdf").onclick=downloadPdf;
+document.getElementById("exportPng").onclick=()=>exportCanvas('png');
+document.getElementById("exportPdf").onclick=()=>exportCanvas('pdf');
+
+document.getElementById("invoiceDate").value=state.date;
 
 render();
 </script>
+
 </body>
 </html>
