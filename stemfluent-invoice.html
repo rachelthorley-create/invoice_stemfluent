@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>STEMfluent — Invoice Generator</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ── PIN overlay ─────────────────────────────────────────────────────────── */
+#pinOverlay{position:fixed;inset:0;background:#1a1a2e;display:flex;align-items:center;justify-content:center;z-index:9999}
+#pinBox{background:#fff;border-radius:12px;padding:40px;text-align:center;width:280px}
+#pinBox h2{margin:0 0 8px;font-size:22px}
+#pinBox p{margin:0 0 20px;color:#666;font-size:13px}
+#pinInput{width:100%;padding:12px;font-size:20px;letter-spacing:6px;text-align:center;border:2px solid #ddd;border-radius:8px;box-sizing:border-box}
+#pinInput:focus{outline:none;border-color:#111}
+#pinBtn{margin-top:12px;width:100%;padding:12px;background:#111;color:#fff;border:0;border-radius:8px;font-size:14px;cursor:pointer}
+#pinError{color:#c00;font-size:13px;margin-top:10px;min-height:18px}
+
+/* ── Layout ──────────────────────────────────────────────────────────────── */
+*{font-family:Montserrat,Arial,sans-serif;box-sizing:border-box}
+html,body{margin:0;background:#f3f3f5}
+.app{display:flex;gap:24px;padding:20px}
+.panel{width:360px;flex-shrink:0;background:#fff;padding:18px;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,0.08)}
+.panel h3{margin:0 0 12px}
+label{display:block;font-size:13px;color:#555;margin:10px 0 4px}
+input[type=text],input[type=number],select,textarea{width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:14px}
+textarea{min-height:72px;resize:vertical}
+button{padding:8px 12px;border-radius:6px;border:0;background:#111;color:#fff;cursor:pointer;font-size:13px;margin-top:6px}
+.btn-ghost{background:#fff;border:1px solid #ccc;color:#111}
+.btn-row{display:flex;gap:8px}
+
+/* ── Page canvas ─────────────────────────────────────────────────────────── */
+.canvas-wrap{flex:1;display:flex;justify-content:center}
+.page{width:794px;min-height:1123px;background:#fff;position:relative;box-shadow:0 10px 30px rgba(0,0,0,0.1);overflow:hidden}
+.bgsvg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.content{position:relative;padding:80px}
+.logo{position:absolute;right:80px;top:60px;text-align:right}
+.logo h1{margin:0;font-size:30px}
+.company-meta{font-size:12px;color:#666;margin-top:6px}
+.big-title{font-size:96px;letter-spacing:8px;margin:110px 0 50px;font-weight:800}
+.meta{display:flex;justify-content:space-between;margin-bottom:28px;gap:40px}
+.meta>div{width:50%}
+
+/* ── Items table ─────────────────────────────────────────────────────────── */
+table{width:100%;border-collapse:collapse;margin-top:16px}
+thead td{font-weight:700;border-bottom:2px dotted #ccc;padding:10px 6px}
+tbody td{border-bottom:1px dotted #e5e5e5;padding:10px 6px;vertical-align:middle}
+td.amt{text-align:right}
+.remove-btn{background:#fff;border:1px solid #ccc;padding:2px 6px;border-radius:4px;cursor:pointer;font-size:11px}
+
+/* ── Shared editable-cell pattern ────────────────────────────────────────── */
+/* Span is hidden normally, shown in export mode replacing the input */
+.xp-text{display:none;font-size:14px;word-break:break-word}
+.ei{border:1px solid #ddd;border-radius:4px;padding:4px 6px;font-size:14px;width:100%}
+.ei-num{width:68px;text-align:right}
+/* Export mode */
+.export-mode .ei{display:none !important}
+.export-mode .remove-btn{display:none !important}
+.export-mode .xp-text{display:inline !important}
+
+/* ── Totals / notes / bank ───────────────────────────────────────────────── */
+.discount-row{display:flex;justify-content:flex-end;margin-top:10px;font-size:15px;color:#666}
+.total-row{display:flex;justify-content:flex-end;margin-top:24px;font-size:22px;font-weight:700}
+.notes-section{margin-top:36px;white-space:pre-wrap;font-size:14px}
+.bank{margin-top:40px;border-top:1px dotted #ccc;padding-top:18px;font-size:14px}
+.bank b{display:inline-block;width:130px}
+.footer{position:absolute;bottom:18px;left:0;right:0;text-align:center;font-size:12px;color:#888}
+</style>
+</head>
+<body>
+
+<!-- PIN Gate -->
+<div id="pinOverlay">
+  <div id="pinBox">
+    <h2>STEMfluent.</h2>
+    <p>Enter PIN to access invoice generator</p>
+    <input id="pinInput" type="password" maxlength="6" placeholder="••••" autocomplete="off"/>
+    <button id="pinBtn">Unlock</button>
+    <div id="pinError"></div>
+  </div>
+</div>
+
+<div class="app" id="mainApp" style="display:none">
+
+  <!-- ── Controls panel ── -->
+  <div class="panel">
+    <h3>Controls</h3>
+
+    <label>Currency</label>
+    <select id="currencySelect">
+      <option value="GBP">GBP (£)</option>
+      <option value="USD">USD ($)</option>
+      <option value="EUR">EUR (€)</option>
+    </select>
+
+    <label>Exchange rate (per 1 GBP)</label>
+    <div class="btn-row">
+      <div><label style="margin:0;font-size:11px">USD</label><input id="rateUSD" type="number" step="0.01" value="1.35"/></div>
+      <div><label style="margin:0;font-size:11px">EUR</label><input id="rateEUR" type="number" step="0.01" value="1.15"/></div>
+    </div>
+
+    <label>Invoice number</label>
+    <input id="invoiceNumber" type="number" value="53" min="1"/>
+
+    <label>Date</label>
+    <input id="invoiceDate" type="text"/>
+
+    <label>Bill to</label>
+    <input id="billTo" type="text" value="FAO "/>
+
+    <label>Discount %</label>
+    <input id="discount" type="number" value="0" min="0" max="100"/>
+
+    <label>Add item from catalogue</label>
+    <select id="itemSelect"></select>
+    <div class="btn-row">
+      <button id="addSelected" class="btn-ghost">Add selected</button>
+      <button id="addBlank" class="btn-ghost">Add blank</button>
+    </div>
+
+    <label>Notes / free text</label>
+    <textarea id="freeText"></textarea>
+
+    <label>Show bank details</label>
+    <select id="bankToggle">
+      <option value="1">Yes</option>
+      <option value="0">No</option>
+    </select>
+
+    <label>Export</label>
+    <div class="btn-row">
+      <button id="exportPng">Download PNG</button>
+      <button id="exportPdf">Download PDF</button>
+    </div>
+  </div>
+
+  <!-- ── Invoice page ── -->
+  <div class="canvas-wrap">
+    <div id="invoicePage" class="page">
+
+      <svg class="bgsvg" viewBox="0 0 794 1123" preserveAspectRatio="none">
+        <polygon points="0,0 250,0 0,350" fill="#777"/>
+        <polygon points="0,250 400,0 0,600" fill="#bbb" opacity="0.6"/>
+      </svg>
+
+      <div class="content">
+        <div class="logo">
+          <h1>STEMfluent.</h1>
+          <div class="company-meta">Registered company: 14959530<br>Churchill College, Cambridge</div>
+        </div>
+
+        <div class="big-title">INVOICE</div>
+
+        <div class="meta">
+          <div>
+            <div><b>Invoice No:</b> <span id="lblInvoice"></span></div>
+            <div style="margin-top:6px"><b>Bill to:</b> <span id="lblBill" style="word-break:break-word"></span></div>
+          </div>
+          <div>
+            <div><b>Date:</b> <span id="lblDate"></span></div>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <td style="width:32px">#</td>
+              <td>Description</td>
+              <td style="width:72px">Qty</td>
+              <td class="amt" style="width:110px" id="amountHeader">Amount / £</td>
+              <td style="width:28px"></td>
+            </tr>
+          </thead>
+          <tbody id="itemsBody"></tbody>
+        </table>
+
+        <div id="discountRow" class="discount-row" style="display:none"></div>
+        <div class="total-row">Total: <span id="totalValue" style="margin-left:12px"></span></div>
+
+        <div id="notesSection" class="notes-section"></div>
+
+        <div class="bank" id="bankSection">
+          <div><b>Bank name:</b> Rachel Thorley</div>
+          <div><b>Account:</b> 04-00-03 &nbsp;32508524</div>
+          <div><b>Bank:</b> Monzo</div>
+        </div>
+
+        <div class="footer">rachelthorley@gmail.com</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+// ══════════════════════════════════════════════════════════════════════════════
+// PIN
+// ══════════════════════════════════════════════════════════════════════════════
+const CORRECT_PIN = "1234"; // ← change before hosting
+
+function checkPin(){
+  if(document.getElementById("pinInput").value === CORRECT_PIN){
+    document.getElementById("pinOverlay").style.display = "none";
+    document.getElementById("mainApp").style.display   = "flex";
+  } else {
+    document.getElementById("pinError").textContent = "Incorrect PIN — try again";
+    document.getElementById("pinInput").value = "";
+  }
+}
+document.getElementById("pinBtn").onclick = checkPin;
+document.getElementById("pinInput").addEventListener("keydown", e => {
+  document.getElementById("pinError").textContent = "";
+  if(e.key === "Enter") checkPin();
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// State & catalogue
+// ══════════════════════════════════════════════════════════════════════════════
+const CURRENCY_SYMBOLS = {GBP:"£", USD:"$", EUR:"€"};
+
+const CATALOG = [
+  {name:"Pottery Workshop",      price:250},
+  {name:"Plant label - small",   price:5.99},
+  {name:"Plant label - medium",  price:6.99},
+  {name:"Plant label - large",   price:7.99},
+  {name:"Postage",               price:0},
+  {name:"Educational Workshop",  price:500}
+];
+
+function todayStr(){
+  const d = new Date();
+  return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
+}
+
+const state = {
+  currency:      "GBP",
+  invoiceNumber: 53,
+  date:          todayStr(),
+  billTo:        "FAO ",
+  items:         [],
+  discount:      0,
+  notes:         "",
+  showBank:      true
+};
+
+// Populate catalogue dropdown
+const catalogSel = document.getElementById("itemSelect");
+CATALOG.forEach((it,i) => {
+  const o = document.createElement("option");
+  o.value = i;
+  o.textContent = `${it.name} (£${it.price.toFixed(2)})`;
+  catalogSel.appendChild(o);
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Helpers
+// ══════════════════════════════════════════════════════════════════════════════
+function getRate(){
+  if(state.currency === "USD") return parseFloat(document.getElementById("rateUSD").value) || 1;
+  if(state.currency === "EUR") return parseFloat(document.getElementById("rateEUR").value) || 1;
+  return 1;
+}
+function sym(){ return CURRENCY_SYMBOLS[state.currency]; }
+function fmt(n){ return sym() + Number(n).toFixed(2); }
+function toDisplay(gbpUnit){ return gbpUnit * getRate(); }
+function toGBP(displayVal){ return (parseFloat(displayVal) || 0) / getRate(); }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Render
+// Shared cell pattern:
+//   <span class="xp-text [xp-price]">value</span>
+//   <input class="ei [ei-num]" ...>
+// xp-text is hidden normally, shown in export mode.
+// ══════════════════════════════════════════════════════════════════════════════
+function render(){
+  document.getElementById("lblInvoice").textContent    = String(state.invoiceNumber).padStart(8,"0");
+  document.getElementById("lblDate").textContent       = state.date;
+  document.getElementById("lblBill").textContent       = state.billTo;
+  document.getElementById("amountHeader").textContent  = "Amount / " + sym();
+  document.getElementById("notesSection").textContent  = state.notes;
+  document.getElementById("bankSection").style.display = state.showBank ? "" : "none";
+
+  const body = document.getElementById("itemsBody");
+  body.innerHTML = "";
+
+  state.items.forEach((it, i) => {
+    const displayPrice = toDisplay(it.unit);
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${i+1}</td>
+      <td>
+        <span class="xp-text">${escHtml(it.desc)}</span>
+        <input class="ei" type="text" value="${escAttr(it.desc)}"
+          oninput="updateDesc(${i},this)">
+      </td>
+      <td>
+        <span class="xp-text">${it.qty}</span>
+        <input class="ei ei-num" type="number" min="0" step="1" value="${it.qty}"
+          oninput="updateQty(${i},this)">
+      </td>
+      <td class="amt">
+        <span class="xp-text xp-price">${fmt(displayPrice)}</span>
+        <input class="ei ei-num" type="number" min="0" step="0.01" value="${displayPrice.toFixed(2)}"
+          oninput="updatePrice(${i},this)">
+      </td>
+      <td><button class="remove-btn" onclick="removeItem(${i})">✕</button></td>`;
+    body.appendChild(tr);
+  });
+
+  recalc();
+}
+
+// Granular update functions (avoid full re-render on every keystroke)
+function updateDesc(i, inp){
+  state.items[i].desc = inp.value;
+  inp.previousElementSibling.textContent = inp.value;
+}
+function updateQty(i, inp){
+  state.items[i].qty = parseFloat(inp.value) || 0;
+  inp.previousElementSibling.textContent = inp.value;
+  recalc();
+}
+function updatePrice(i, inp){
+  state.items[i].unit = toGBP(inp.value);
+  inp.previousElementSibling.textContent = fmt(parseFloat(inp.value) || 0);
+  recalc();
+}
+function removeItem(i){
+  state.items.splice(i, 1);
+  render();
+}
+
+function recalc(){
+  let total = 0;
+  state.items.forEach(it => total += (it.qty || 0) * toDisplay(it.unit));
+  const disc = state.discount ? total * (state.discount / 100) : 0;
+  const dRow = document.getElementById("discountRow");
+  if(state.discount > 0){
+    dRow.style.display = "flex";
+    dRow.textContent   = `Discount ${state.discount}% applied: −${fmt(disc)}`;
+  } else {
+    dRow.style.display = "none";
+  }
+  document.getElementById("totalValue").textContent = fmt(total - disc);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Control bindings
+// ══════════════════════════════════════════════════════════════════════════════
+document.getElementById("currencySelect").onchange = e => { state.currency = e.target.value; render(); };
+document.getElementById("rateUSD").oninput         = () => render();
+document.getElementById("rateEUR").oninput         = () => render();
+document.getElementById("invoiceNumber").oninput   = e => { state.invoiceNumber = parseInt(e.target.value) || 0; render(); };
+document.getElementById("invoiceDate").oninput     = e => { state.date = e.target.value; render(); };
+document.getElementById("billTo").oninput          = e => { state.billTo = e.target.value; render(); };
+document.getElementById("discount").oninput        = e => { state.discount = parseFloat(e.target.value) || 0; recalc(); };
+document.getElementById("freeText").oninput        = e => { state.notes = e.target.value; render(); };
+document.getElementById("bankToggle").onchange     = e => { state.showBank = e.target.value === "1"; render(); };
+
+document.getElementById("addSelected").onclick = () => {
+  const c = CATALOG[catalogSel.value];
+  if(!c) return;
+  state.items.push({desc:c.name, qty:1, unit:c.price});
+  render();
+};
+document.getElementById("addBlank").onclick = () => {
+  state.items.push({desc:"New item", qty:1, unit:0});
+  render();
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Export  (shared pattern — identical structure in BKW version)
+// ══════════════════════════════════════════════════════════════════════════════
+function syncSpansBeforeExport(page){
+  // Walk every editable input; write its current value into the adjacent xp-text span.
+  // xp-price spans get currency-formatted text; all others get raw value.
+  page.querySelectorAll("input.ei").forEach(inp => {
+    const span = inp.previousElementSibling;
+    if(span && span.classList.contains("xp-text")){
+      span.textContent = span.classList.contains("xp-price")
+        ? fmt(parseFloat(inp.value) || 0)
+        : inp.value;
+    }
+  });
+}
+
+function fileSlug(){
+  // e.g. "STEMfluent-invoice-053-FAO-Smith"
+  const num = String(state.invoiceNumber).padStart(3,"0");
+  const customer = state.billTo.trim().replace(/[^a-zA-Z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,30);
+  return `STEMfluent-invoice-${num}${customer ? "-"+customer : ""}`;
+}
+
+async function exportCanvas(type){
+  const page = document.getElementById("invoicePage");
+  syncSpansBeforeExport(page);
+  page.classList.add("export-mode");
+  await new Promise(r => setTimeout(r, 60));
+
+  const canvas = await html2canvas(page, {
+    scale:   type === "pdf" ? 1.5 : 1,
+    useCORS: true,
+    logging: false
+  });
+  page.classList.remove("export-mode");
+
+  const slug = fileSlug();
+
+  if(type === "png"){
+    canvas.toBlob(b => {
+      const a = document.createElement("a");
+      a.download = `${slug}.png`;
+      a.href = URL.createObjectURL(b);
+      a.click();
+    }, "image/png");
+  } else {
+    const img = canvas.toDataURL("image/jpeg", 0.85);
+    const {jsPDF} = window.jspdf;
+    const pdf = new jsPDF({unit:"pt", format:"a4"});
+    pdf.addImage(img, "JPEG", 0, 0, 595.28, 841.89);
+    pdf.save(`${slug}.pdf`);
+  }
+}
+
+document.getElementById("exportPng").onclick = () => exportCanvas("png");
+document.getElementById("exportPdf").onclick = () => exportCanvas("pdf");
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Utility
+// ══════════════════════════════════════════════════════════════════════════════
+function escHtml(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function escAttr(s){ return String(s).replace(/"/g,"&quot;"); }
+
+// Init
+document.getElementById("invoiceDate").value = state.date;
+render();
+</script>
+</body>
+</html>
